@@ -1,0 +1,14 @@
+{
+  "name": "com.gemserk.dependencies-helper",
+  "version": "0.0.1",
+  "displayName": "Dependencies Helper by Gemserk",
+  "description": "Tool to allow detection and replacement of dependencies of assets and subassets",
+  "unity": "2020.3",
+  "unityRelease": "0f1",
+  "keywords": [],
+  "author": {
+    "name": "Rubén Garat",
+    "email": "ruben.garat@gemserk.com",
+    "url": "https://blog.gemserk.com"
+  }
+}
