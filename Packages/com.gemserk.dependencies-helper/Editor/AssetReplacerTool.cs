@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -9,8 +10,41 @@ using Object = UnityEngine.Object;
 
 namespace Gemserk.DependenciesHelper
 {
+    public class AssetRef
+    {
+        public long fileId;
+        public string guid;
+
+        public static AssetRef New(long fileId, string guid)
+        {
+            return new AssetRef {fileId = fileId, guid = guid};
+        }
+
+        protected bool Equals(AssetRef other)
+        {
+            return fileId == other.fileId && string.Equals(guid, other.guid, StringComparison.InvariantCulture);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((AssetRef) obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (fileId.GetHashCode() * 397) ^ (guid != null ? StringComparer.InvariantCulture.GetHashCode(guid) : 0);
+            }
+        }
+    }
+    
     public class AssetReplacerTool
     {
+       
         public interface IDependencyInfoProvider
         {
             List<string> GuidsOfUsers(string dependencyGuid);
@@ -100,9 +134,15 @@ namespace Gemserk.DependenciesHelper
             return usages;
         }
 
-        private static Regex CreateRegexp(long localId, string guid)
+        public static Regex CreateRegexp(long localId, string guid)
         {
             Regex referenceRegexp = new Regex($"{{fileID:\\s+({localId}),\\s+guid:\\s+({guid}),", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
+            return referenceRegexp;
+        }
+        
+        public static Regex CreateRegexp()
+        {
+            Regex referenceRegexp = new Regex($"({{fileID:\\s+)(-?[0-9]+)(,\\s+guid:\\s+)([0-9abcdef]+)(,)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
             return referenceRegexp;
         }
 
@@ -114,14 +154,37 @@ namespace Gemserk.DependenciesHelper
             Debug.Log($"REPLACEMENT: {replacementGuid} - {replacementLocalId} - {AssetDatabase.GUIDToAssetPath(replacementGuid)}");
             Debug.Log($"USAGE: {userPath}");
 
-            var regexp = CreateRegexp(originalLocalId, originalGuid);
-            var text = File.ReadAllText(userPath);
-            // var newText = regexp.Replace(text, match =>
-            // {
-            //    // match.
-            //
-            // });
+            var originalAssetRef = AssetRef.New(originalLocalId, originalGuid);
+            var replacementAssetRef = AssetRef.New(replacementLocalId, replacementGuid);
 
+            var sourceFile = File.ReadAllText(userPath);
+            var targetFile = ReplaceDependencyInPlace(sourceFile, originalAssetRef, replacementAssetRef);
+            File.WriteAllText(userPath, targetFile);
+        }
+
+        public static string ReplaceDependencyInPlace(string fileContent, AssetRef original, AssetRef replacement)
+        {
+            var regexp = CreateRegexp();
+            return regexp.Replace(fileContent, match =>
+            {
+                var tuple = ExtractFromMatch(match);
+                if (!original.Equals(tuple))
+                {
+                    return match.Value;
+                }
+                else
+                {
+                    return $"{match.Groups[1]}{replacement.fileId}{match.Groups[3]}{replacement.guid}{match.Groups[5]}";
+                }
+            });
+        }
+
+        public static AssetRef ExtractFromMatch(Match match)
+        {
+            var fileIdString = match.Groups[2].Value;
+            long fileId = long.Parse(fileIdString);
+            var guid = match.Groups[4].Value;
+            return AssetRef.New(fileId, guid);
         }
     }
 }
